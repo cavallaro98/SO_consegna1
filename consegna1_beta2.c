@@ -167,7 +167,7 @@ void *thread_function(void *arg){
 
 		}else{
 			pthread_mutex_lock(&mutex_controllo_uscita);
-			controllo_uscita[numero_thread]=1;
+			controllo_uscita[numero_thread]=1; // SISTEMARE QUESTO CONTORLLO 
 			int somma=0;
 			for(int i=0; i<2; i++){
 				if(controllo_uscita[i] ==1) somma=somma+1;
