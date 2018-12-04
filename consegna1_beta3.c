@@ -11,8 +11,11 @@ Implementato l'inserimento del path iniziale da argomento main
 DA RISOLVERE: ERROE: 
 			Inserisci il path: /home/<nome_utente>
 			*** stack smashing detected ***: <unknown> terminated
-			Annullato (core dump creato)
+			Annulla	to (core dump creato)
 Commenti aggiunti
+Implementato lo stato parziale dello stato di ricerca
+Implementato il menu di scelta di visualizzazione della lista (ovviamente e' stato implementato questo menu' perche' ovviamente
+saranno aggiunte altre funzioni di visualizzazione della ricerca);
 
 */
 
@@ -59,9 +62,16 @@ int elimina_directory_lista(p_lista_file *lista);
 p_lista_file scansiona_directory(char *path_name_directory);
 int unisci_liste(p_lista_file *lista_principale, p_lista_file lista_da_unire);
 int inserimento_directory_vuota(p_lista_file *lista_principale, char *path_corrente);
-
+int stampa_menu();
+void avvia_menu(int scelta);
 
 int main(int argc, char *argv[1]){
+	if(argv[1] == NULL){
+		printf("\nIl seguente programma dato un path scansiona ricorsivamente la directory e le subdirectory.");
+		printf("\nPercorso di ricerca non iserito!!\nRilancia il programma inserendo un path valido");
+		printf("\nEXIT_FAILURE!!\n");
+		exit(EXIT_FAILURE);
+	}
 	DIR *directory; // rappresenta il tipo di dati di un flusso di directory
 	struct dirent *file;
 	struct stat my_stat;
@@ -71,6 +81,7 @@ int main(int argc, char *argv[1]){
 	//int numero_core = 0;
 	int flag;
 	int controllo;
+	int opzioni_menu;
 
 	//la funzione get_nprocs_conf(void) restituisce il numero di core
 	numero_core = get_nprocs_conf();  
@@ -96,7 +107,7 @@ int main(int argc, char *argv[1]){
 	pthread_mutex_lock(&mutex_lista); 
 
 	strcpy(path, argv[1]);
-	printf("\n %s", path);
+	printf("\n-- Inizio la scansione dei file a partire dal seguente path: '%s' --\n", path);
 
 	if((directory = opendir(path)) != NULL){ //apre e restituisce un flusso di directory
 		while(( file = readdir(directory)) != NULL){
@@ -109,7 +120,9 @@ int main(int argc, char *argv[1]){
 		}
 		closedir(directory);
 	}else{
-		perror("\nErrore apertura percorso");
+		perror("\n-- ERRORE APERTURA PERCORSO --");
+		printf("\nEXIT_FAILURE!!\n");
+		exit(EXIT_FAILURE);
 	}
 	
 	/*Adesso creo tanti thread in base al mio numero di core*/
@@ -119,19 +132,27 @@ int main(int argc, char *argv[1]){
 
 	pthread_mutex_unlock(&mutex_lista);
 	
+	printf("\nRICERCA IN CORSO...");
+	fflush(stdout);
 	/*Il main thread non deve fare più nulla per adesso quindi deve attendere il completamente del lavore dei thread e li aspetta*/
 	for(int i=0; i<numero_core; i++){
 		pthread_join(thread[i], NULL);
 	}
 	
+	printf("\nRICERCA COMLETATA CON SUCCESSO\n");
+	fflush(stdout);
 	/*Quando i thread hanno finito di comporre la lista e hanno terminato allora il main thread stampa a video la nuova lista creata dai thread*/
-	stampa_lista(lista_file);
+	//stampa_lista(lista_file);
 	
+	/*Adesso il main thread dopo aver elaborato la scelta stampa a video il menu di selezione di visualizzazione della lista*/
+	opzioni_menu = stampa_menu();
+	avvia_menu(opzioni_menu);
+
 	/*Adesso posso distruggere i mutex che ho usato*/
 	pthread_mutex_destroy(&mutex_lista);
 	pthread_mutex_destroy(&mutex_controllo_uscita);
 	/*FINE*/
-	exit(0);
+	exit(EXIT_SUCCESS);
 }
 
 void *thread_function(void *arg){
@@ -264,17 +285,19 @@ int inserisci_lista(p_lista_file *lista, struct dirent *file, char *path_corrent
 void stampa_lista(p_lista_file lista_stampa){
 	printf("\n");
 	while( lista_stampa != NULL){
+		printf("\n---------------------------------------------------------------------------------------------------------------");
 		printf("\n|Nome_file = %s ",lista_stampa->info.nome_file);
 		//printf("\n|					|| Dimensioni_file: %ld", lista_stampa->info.stat_file.st_size);
 		printf("\n|					|| Path_file: %s", lista_stampa->info.path_file);
-		printf("\n|					|| FLAG: %d", lista_stampa->info.flag_type);
+		//printf("\n|					|| FLAG: %d", lista_stampa->info.flag_type);
 		if(S_ISDIR(lista_stampa->info.stat_file.st_mode)){
 			//CONTROLLA se è una directory
 			printf("\n|					|| E' una directory");
 		}
 		lista_stampa = lista_stampa->next;	
 	}
-	printf("\n");
+	printf("\n---------------------------------------------------------------------------------------------------------------");
+	printf("\n\n");
 }
 
 p_lista_file trova_directory(p_lista_file lista){
@@ -375,7 +398,21 @@ int inserimento_directory_vuota(p_lista_file *lista_principale, char *path_corre
 	return 1;
 }
 
+int stampa_menu(){
+	int scelta;
+	printf("\n_______________________________ START_MENU' _______________________________");
+	printf("\n1) Stampa i risulati della ricerca");
+	printf("\n_______________________________  END_MENU'  _______________________________");
+	printf("\n\nInserisci l'opzione scelta: ");
+	scanf("%d", &scelta);
+	printf("\n");
+	return scelta;
+}
 
-
-
-
+void avvia_menu(int scelta){
+	switch(scelta){
+		case 1:
+			stampa_lista(lista_file);
+		break;
+	}
+}
