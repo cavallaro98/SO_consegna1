@@ -12,6 +12,8 @@
 #include <sys/sysinfo.h>
 #include <dirent.h> //aprire un flusso di directory
 
+#define STREAM_MAX 7777
+
 int numero_core;
 int controllo_uscita[20]; //credo che 20 core al massimo possono bastare
 
@@ -59,8 +61,15 @@ int richiesta_registrazione(int client_descriptor, struct sockaddr_in client_add
 int invio_lista(p_lista_file lista, int client_descriptor);
 int invio_file_richiesto(int client_descriptor, char *nome_file, char *path_file);
 int ls_home();
+int download(int server_socket, char *nome_file);
+void menu();
 
 int main(){
+
+	system("clear");
+	
+	printf("\n________________SERVER ON________________\n\n");
+
 	int server_socket;
 	//int client_descriptor;
 	struct sockaddr_in server_address;
@@ -69,7 +78,7 @@ int main(){
 	int controllo;
 	int n_connessioni = 0;
 	pthread_t thread[5];
-	size_t client_len = 0;
+	socklen_t client_len = 0;
 	int accesso;
 	int file_login;
 	int ls_success;
@@ -80,7 +89,7 @@ int main(){
 	
 	printf("\nScansione \"home\" in corso...");
 	ls_success = ls_home();
-	printf("\nScansione completata con successo! = ls_success:%d", ls_success);
+	//printf("\nScansione completata con successo! = ls_success:%d", ls_success);
 
 	/*Creo la socket*/
 	server_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -102,12 +111,14 @@ int main(){
 	
 	/*Adesso creo un loop infinito per il server*/
 	while(1){
-		client_len = sizeof(client.client_address);
+		client_len = (socklen_t)sizeof(client.client_address);
 		client.client_descriptor = accept(server_socket, (struct sockaddr*)&client.client_address, &client_len);
 		pthread_create(&thread[n_connessioni], NULL, send_client, (void*)&client);
 		n_connessioni ++;
 		
 	}
+	printf("-- End main --");
+	fflush(stdout);
 }
 
 int login(int client_descriptor, struct sockaddr_in client_address){
@@ -133,17 +144,20 @@ int login(int client_descriptor, struct sockaddr_in client_address){
 
 		write(client_descriptor, "Inserisci le tue credenziali\nUsername: ", 39);
 		read(client_descriptor, user, 20);
-		printf("\n-- User: %s", user);
+		printf("\n_______________________________________________________");
+		printf("\n[USER]: %s", user);
 		fflush(stdout);
 		write(client_descriptor, "Password: ", 10);
 		read(client_descriptor, password, 20);
-		printf("\n-- Password: %s", password);
+		printf("\n[PASSWORD]: %s", password);
 		fflush(stdout);
 
 		while( (fscanf(f_login, "%s %s %c %s %s", buff, buff_user, buff, buff, buff_password)) == 5 ){
 			if( (strcmp(buff_user, user) == 0) && (strcmp(buff_password, password) == 0) ){
 				write(client_descriptor, "__Utente trovato___", 19);
-				printf("\n__Utente trovato___");
+				printf("\n*** Utente trovato ***");
+				printf("\n_______________________________________________________");
+				fflush(stdout);
 				return 0;
 				//utente_trovato = 1;
 				//utente_registrato = 1;
@@ -211,9 +225,20 @@ void *send_client(void *arg){
 	
 	int accesso;
 	int ctrl_invio_lista;
+	char scelta[20];
+	char r;
+	char nome_file[20];
+	int success;
+	int reset;
+	int end = 0;
+	char user[64];
+	getlogin_r(user, sizeof(user)-1);
+	char stream[STREAM_MAX];
 
-	printf("\nRichiesta accesso: \n- indirizzo ip_client: %s \n- porta_client:%d ", inet_ntoa(client.client_address.sin_addr), ntohs(client.client_address.sin_port));
-	printf("\nControllo autentificazione ...");
+	printf("\n[RICHIESTA ACCESSO]:");
+	printf("\n- Indirizzo ip_client: %s", inet_ntoa(client.client_address.sin_addr));
+	printf("\n- Porta_client: %d ", ntohs(client.client_address.sin_port));
+	printf("\n\n__CONTROLLO AUTENTIFICAZIONE__");
 	fflush(stdout);
 	accesso = login(client.client_descriptor, client.client_address);
 	if(accesso == -1){
@@ -222,30 +247,107 @@ void *send_client(void *arg){
 		close(client.client_descriptor);
 		exit(EXIT_FAILURE);
 	}else{
-		printf("\nAutentificazione accettata -- Connessione stabilita --");
-		ctrl_invio_lista = invio_lista(lista_file, client.client_descriptor);
-		if(ctrl_invio_lista == 0){
-			printf("\nInvio lista completato con successo");
-			printf("\nAttendo richiesta di invio...");
-			char nome_file[20];
-			char path_file[100];
-			memset(nome_file, 0, 20);
-			read(client.client_descriptor, nome_file, 20);
-			write(client.client_descriptor, "r", 1);
-			printf("\nnome:%s", nome_file);
-			memset(path_file, 0, 100);
-			read(client.client_descriptor, path_file, 100);
-			printf("\npath:%s", path_file);
-			int invio_riuscito;
-			invio_riuscito = invio_file_richiesto(client.client_descriptor, nome_file,path_file);
-			printf("\nInvio riuscito = %d", invio_riuscito);
-			close(client.client_descriptor);
-		}else if(ctrl_invio_lista == -1){
-			printf("\nInvio lista fallito");
-		}
+		printf("\n\nAutentificazione accettata -- CONNESSIONE STABILITA --");
+		printf("\n_______________________________________________________\n");
 		fflush(stdout);
+		
+		
+		while(!end){
+			int n_cmd_shell;
+			char cmd_shell[20];
+			menu();
+			fflush(stdout);
+			memset(scelta, 0, 20);
+			read(client.client_descriptor, scelta, 10);
+			printf("\nScelta ricevuta: %s", scelta);
+			printf("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\n");
+			fflush(stdout);
+
+			if(strncmp(scelta, "___close__", 10) == 0){
+				printf("\n\nChiusura conessione: |ip_client: %s |porta_client: %d\n", inet_ntoa(client.client_address.sin_addr), ntohs(client.client_address.sin_port));
+				fflush(stdout);
+				close(client.client_descriptor);
+				end = 1;
+			}
+			if(strncmp(scelta, "_download_", 10) == 0){
+				printf("\nInvio lista dei file in corso...");
+				ctrl_invio_lista = invio_lista(lista_file, client.client_descriptor);
+				if(ctrl_invio_lista == 0){
+					printf("\n__INVIO LISTA FILE COMPLETATO__");
+					printf("\n\nAttendo richiesta di invio file specifico...\n");
+					fflush(stdout);
+					//char nome_file[20];
+					char path_file[100];
+					memset(nome_file, 0, 20);
+					read(client.client_descriptor, nome_file, 20);
+					write(client.client_descriptor, "r", 1);
+					printf("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+					printf("\n[Nome file]:%s", nome_file);
+					fflush(stdout);
+					memset(path_file, 0, 100);
+					read(client.client_descriptor, path_file, 100);
+					printf("\n[Path file]:%s", path_file);
+					printf("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+					fflush(stdout);
+					int invio_riuscito;
+					invio_riuscito = invio_file_richiesto(client.client_descriptor, nome_file,path_file);
+					if(invio_riuscito == 0) printf("\n\n__FILE INVIATO CORRETTAMENTE__\n");
+					fflush(stdout);
+					if(invio_riuscito == -1) printf("\n\n__ERRORE INVIO FILE__\n");
+					fflush(stdout);
+					//close(client.client_descriptor);
+				}else if(ctrl_invio_lista == -1){
+					printf("\nInvio lista fallito");
+				}
+				//end = 1;
+			}
+			if(strncmp(scelta, "__upload__", 10) == 0){
+				printf("\nRecezione file in corso...");
+				fflush(stdout);
+				write(client.client_descriptor, "r", 1);
+				read(client.client_descriptor, nome_file, 20);
+				printf("\nFile da ricevere: \" %s \"", nome_file);
+				write(client.client_descriptor, "r", 1);
+				success = download(client.client_descriptor, nome_file);
+				//printf("\n\n---------------success: %d", success);
+				fflush(stdout);
+				if(success == 0){
+					printf("\n[Cartella destinazione: \"Scariati\"] __File ricevuto con successo__");
+					printf("\n[_NEW_FILE_ Path File]: /home/%s/Scaricati/%s\n", user, nome_file);
+					fflush(stdout);
+				}else{
+					printf("\n__ERRORE RECEZIONE FILE__\n");
+					fflush(stdout);
+				}
+				//end = 1;
+			}
+			if(strncmp(scelta, "cmd_shell_", 10) == 0){
+				memset(cmd_shell, 0, strlen(cmd_shell));
+				printf("\nAttendo comando da eseguire");
+				fflush(stdout);
+				write(client.client_descriptor, "r", 1);
+				read(client.client_descriptor, &n_cmd_shell, sizeof(int));
+				write(client.client_descriptor, "r", 1);
+				read(client.client_descriptor, cmd_shell, n_cmd_shell);
+				printf("\nComando ricevuto: %s", cmd_shell);
+				fflush(stdout);
+				FILE *fp_stream;
+				fp_stream = popen(cmd_shell, "r");
+				printf("\nInvio output al client...");
+				fflush(stdout);
+				while(fgets(stream, STREAM_MAX, fp_stream) != NULL){
+					write(client.client_descriptor, stream, strlen(stream));
+				}
+				sleep(1);
+				printf("\nEND TO STREAM\n");
+				fflush(stdout);
+				write(client.client_descriptor, "_end_to_stream_", 15);
+				pclose(fp_stream);
+			}
+
+		}
 	}		
-	
+	//exit(EXIT_SUCCESS);
 }
 
 
@@ -330,7 +432,7 @@ int ls_home(){
 	printf("\nRICERCA COMLETATA CON SUCCESSO\n");
 	fflush(stdout);
 	/*Quando i thread hanno finito di comporre la lista e hanno terminato allora il main thread stampa a video la nuova lista creata dai thread*/
-	stampa_lista(lista_file);
+	//stampa_lista(lista_file);
 	
 
 	/*Adesso posso distruggere i mutex che ho usato*/
@@ -605,14 +707,15 @@ int invio_lista(p_lista_file lista, int client_descriptor){
 int invio_file_richiesto(int client_descriptor, char *nome_file, char *path_file){
 	strcat(path_file, "/");
 	strcat(path_file, nome_file);
-	printf("\n%s", path_file);
+	//printf("\nFile richiesto: %s", path_file);
 	
 	FILE *fp = fopen(path_file,"rb");
 	if(fp==NULL){
-		printf("\nFile opern error");
+		write(client_descriptor, "Errore", 6);
+		perror("\nErrore apertura file");
 		return -1;   
 	}   
-
+	printf("\nINVIO FILE IN CORSO...");
 	while(1){
 		unsigned char buff[1024]={0};
 		int nread = fread(buff,1,1024,fp);
@@ -621,18 +724,83 @@ int invio_file_richiesto(int client_descriptor, char *nome_file, char *path_file
 		}
 		if (nread < 1024){
 			if (feof(fp)){
-				printf("\n-- Fine file --");
+				//printf("\n-- Fine file --");
+				write(client_descriptor, "_fine_file_",11);
+				break;
+			}else{
+				write(client_descriptor, buff, nread);
+				//break;
 			}
-			break;
 		}
 	}
+	
+	fclose(fp);
+
 	return 0;
 }
 
+int download(int server_socket, char *nome_file){
+	//Invio richiesta upload
+	char user[64];
+	getlogin_r(user, sizeof(user)-1);
+	char path_file[]="/home/";
+	strcat(path_file, user);
+	strcat(path_file, "/Scaricati/");
+	strcat(path_file, nome_file);
+	//printf("\n\n_______ %s ________", path_file);
+	fflush(stdout);
+	char recvBuff[1024];
+	memset(recvBuff, '0', sizeof(recvBuff));
+	int bytesReceived = 0;
+	FILE *fp;
+	printf("\nReceiving file...");
+	fflush(stdout);
+	fp = fopen(path_file, "ab"); 
+	if(NULL == fp){
+		printf("\nErrore apertura file");
+		return -1;
+	}
 
+	while((bytesReceived = read(server_socket, recvBuff, 1024)) > 0){
+		if(strncmp(recvBuff, "Errore", 6) == 0){
+			remove(path_file);	
+			return -1;
+		}
+		if(strncmp(recvBuff, "_fine_file_", 11) == 0){	
+			//printf("\n\n__Fine file ricevuto__");
+			fflush(stdout);
+			fclose(fp);
+			return 0;
+		}
+		if(bytesReceived < 1024){
+			fwrite(recvBuff, 1, bytesReceived, fp);
+			fclose(fp);
+			return 0;
+		}
+		fwrite(recvBuff, 1,bytesReceived,fp);
+	}
+	
+	if(bytesReceived > 0 && bytesReceived < 1024){
+		fwrite(recvBuff, 1,bytesReceived,fp);
+		//printf("\n\n--Fine File--");
+	}
+	if(bytesReceived < 0){
+		return -1;
+	}
+	fclose(fp);
+	return 0;
+}
 
-
-
+void menu(){
+	printf("\n_______________MENU'________________");
+	printf("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+	printf("\n0) Chiudi connessione              |");
+	printf("\n1) Download file server            |");
+	printf("\n2) Upload file server              |");
+	printf("\n3) CMD Shell remota                |");
+	printf("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+	printf("\nATTENDO RISPOSTA DAL CLIENT...     |");
+}
 
 
 
