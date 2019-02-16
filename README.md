@@ -5,10 +5,10 @@ L’accesso al server è protetto da un basico sistema di login.
 Il "Client" può far richiesta di registrazione verso il server e se verrà accettata dal "Server" (che a sua volta memorizza le credenziali d’accesso in un apposito file), può proseguire richiedendo al server una delle varie opzioni presenti nel menù di scelta.
 
 Il menù è composto da 4 voci:
-  - 0. Chiusura connessione 
-  - 1. Download file dal server
-  - 2. Upload file sul server
-  - 3. Comandare Shell remota del server
+  - 0) Chiusura connessione 
+  - 1) Download file dal server
+  - 2) Upload file sul server
+  - 3) Comandare Shell remota del server
   
 Quando si richiede di scaricare file dal server, come prima cosa, esso invierà una lista di tutti i file presenti sul server dalla directory "/home/" in poi. Il client allora può richiedere al server il file desiderato.
 L'opzione d’invio di un file verso il server viene gestita in modo analogo, il client deve selezionare il file da inviare al server, il quale attende l'invio del file che, una volta ricevuto, viene memorizzato nella directory "/home/<nome_utente>/Scaricati" del server.
